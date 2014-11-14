@@ -1,0 +1,89 @@
+---
+title: "Weight Lifting Exercise Performance Prediction"
+output: html_document
+author: "By: Julien Grenier"
+---
+
+
+## Description
+Using the data from the **Weight Ligting Exercices Dataset**(https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) acquired by the [**Human Activity Recognition Project**](http://groupware.les.inf.puc-rio.br/har) we will attempt to predict the execution of the dumbbell biceps curl.
+
+## Data preparation
+Data acquisition is a tricky business and we will need to perform some data cleanup prior to build our model.
+Some column are containing the value "#DIV/0!" which will need to remove and then transform those columns into numerics.
+We will also drop the first 6 columns are they are irrelevant and non-numeric. We will then make sure all columns are numerics (except the outcome "class"). We will also get rid of columns containing only NA's or a single value.
+
+```{r, cache=TRUE, warning=FALSE}
+pml_training <- read.csv('pml-training.csv')
+rows_with_div_0 <- unique(unlist(lapply(pml_training, function(x) which(x == '#DIV/0!'))))
+pml_training <- pml_training[-rows_with_div_0,]
+pml_training <- pml_training[,c(-1,-2,-3,-4,-5,-6)]
+pml_training <- modifyList(pml_training, lapply(pml_training[,sapply(pml_training[,-154], is.factor)], as.numeric))
+pml_training <- pml_training[,sapply(pml_training, function(x)!all(is.na(x)))]
+pml_training <- pml_training[,sapply(pml_training, function(x)!all(x==1))]
+```
+
+## Model Training
+### Partition creation
+First, we will split our data into 2 partitions
+```{r, cache=TRUE, warning=FALSE}
+set.seed(12345)
+library(caret)
+inTrain <- createDataPartition(pml_training$classe, p = 0.7, list = FALSE)
+training <- pml_training[inTrain,]
+testing <- pml_training[-inTrain,]
+```
+
+### Cross-validation
+Let's use a *2*-fold repeated 5 times cross-validation. 
+```{r, cache=TRUE, warning=FALSE}
+fitControl <- trainControl(method = "repeatedcv",number = 2,repeats = 5, allowParallel=TRUE)
+```
+This will perform five 2-fold cross-validation. Setting *k=2* will produce bigger bias in the estimate of out-of-sample accuracy but we are repeating the experiment 5 times which will lower the bias and keep the variance small. Also this has the advantage of being quite fast.
+
+### Method selection
+Let's train a model using the *k*-nearest neighbors algorithm and preprocessing the data using PCA(principal component analysis). The reason we are using PCA is that we want to transform 54 remaining predictors (which some might be correlated) in a set of linearly uncorrelated variables. It is also necessary to avoid the [Curse of Dimensionality](http://en.wikipedia.org/wiki/Curse_of_Dimensionality) when using the *k*-nearest neighbors method.
+We choosed the *k*-NN method because we are trying to predict a factor and that it is a good, simple method for classification problems.
+
+```{r, cache=TRUE, warning=FALSE}
+library(doMC)
+registerDoMC(4) # register 4 cores
+modelFitKnn <- train(classe ~., data=training, method='knn', trControl = fitControl, preProcess=c("pca"))
+plot(modelFitKnn)
+```
+
+As we can obverse *k* have been set to `r modelFitKnn$bestTune[[1]]`.
+
+## Model analysis.
+
+### Confusion Matrix
+```{r, cache=TRUE}
+confusion_matrix <- confusionMatrix(predict(modelFitKnn, newdata = training), training$classe)
+print(confusion_matrix$table)
+print(confusion_matrix$overall)
+```
+
+The *in sample* model accuracy is `r confusion_matrix$overall[1]` with a 95% confidence interval of [`r confusion_matrix$overall[[3]]`, `r confusion_matrix$overall[[4]]`]
+
+### Out of sample error
+```{r, cache=TRUE}
+confusion_matrix_oos <- confusionMatrix(predict(modelFitKnn, newdata = testing), testing$classe)
+print(confusion_matrix_oos)
+```
+
+The *out sample* model accuracy is `r confusion_matrix_oos$overall[1]` with a 95% confidence interval of [`r confusion_matrix_oos$overall[[3]]`,`r confusion_matrix_oos$overall[[4]]`]
+
+
+## Conclusion
+
+We shall now validate our model using the original test set (https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+```{r, cache=TRUE}
+pml_testing <- read.csv('pml-testing.csv')
+predictions <- predict(modelFitKnn, newdata = pml_testing)
+print(predictions)
+```
+
+This correctly predicted 19/20 of the tests (as expected). If we analyse the *out sample* confusion matrix, The miss-labelled "A" is either a "B"(45/65) or a "C"(17/65). Given the fact the class "B" sensitivity is lower than class "C" and also that class "B" prevalence is higher, it would be fair to guess that it should have been a "B". 
+
+To achieve better result, we could increase the number of folds and repetition to k=10,n=10 and use a better performing method like **Random Forrest** but this will take hours to train the model instead of a few minutes.
