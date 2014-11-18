@@ -6,11 +6,11 @@ author: "By: Julien Grenier"
 
 
 ## Description
-Using the data from the **Weight Ligting Exercices Dataset**(https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) acquired by the [**Human Activity Recognition Project**](http://groupware.les.inf.puc-rio.br/har) we will attempt to predict the execution of the dumbbell biceps curl.
+Using the data from the **Weight Ligting Exercices Dataset**(https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) acquired by the [**Human Activity Recognition Project**](http://groupware.les.inf.puc-rio.br/har) we will attempt to predict the quality execution of the dumbbell biceps curl.
 
 ## Data preparation
 Data acquisition is a tricky business and we will need to perform some data cleanup prior to build our model.
-Some column are containing the value "#DIV/0!" which will need to remove and then transform those columns into numerics.
+Some columns are containing the value "#DIV/0!" which we need to remove and then transform those columns into numerics.
 We will also drop the first 6 columns are they are irrelevant and non-numeric. We will then make sure all columns are numerics (except the outcome "class"). We will also get rid of columns containing only NA's or a single value.
 
 ```{r, cache=TRUE, warning=FALSE}
@@ -47,7 +47,7 @@ We choosed the *k*-NN method because we are trying to predict a factor and that 
 
 ```{r, cache=TRUE, warning=FALSE}
 library(doMC)
-registerDoMC(4) # register 4 cores
+registerDoMC(4) # register 4 cores, change this value according the your computer specifications.
 modelFitKnn <- train(classe ~., data=training, method='knn', trControl = fitControl, preProcess=c("pca"))
 plot(modelFitKnn)
 ```
@@ -71,7 +71,7 @@ confusion_matrix_oos <- confusionMatrix(predict(modelFitKnn, newdata = testing),
 print(confusion_matrix_oos)
 ```
 
-The *out sample* model accuracy is `r confusion_matrix_oos$overall[1]` with a 95% confidence interval of [`r confusion_matrix_oos$overall[[3]]`,`r confusion_matrix_oos$overall[[4]]`]
+The *out sample* model accuracy is `r confusion_matrix_oos$overall[1]` with a 95% confidence interval of [`r confusion_matrix_oos$overall[[3]]`,`r confusion_matrix_oos$overall[[4]]`]. This mean that we should expect to correctly predict 19 of the 20 entries in the testset.
 
 
 ## Conclusion
